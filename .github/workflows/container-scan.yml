@@ -1,4 +1,56 @@
+name: Automated Container Vulnerability Scan
 
 on:
-push:
-branches: [ "main", "master"]
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-scan:
+    name: Build Docker Image & Scan Vulnerabilities
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the code from repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Step 3: Build the local Docker image
+      - name: Build Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          tags: my-app:latest
+
+      # Step 4: Run Trivy Vulnerability Scanner (Table Output)
+      - name: Run Trivy Scanner (Console Summary)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'my-app:latest'
+          format: 'table'
+          exit-code: '0' # Non-blocking scan so pipeline completes and displays results
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+      # Step 5: Run Trivy Scanner and Generate SARIF File for GitHub Security Tab
+      - name: Run Trivy Scanner (SARIF Output)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'my-app:latest'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      # Step 6: Upload vulnerability report to GitHub Code Scanning Tab
+      - name: Upload SARIF report to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
